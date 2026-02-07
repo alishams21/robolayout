@@ -20,6 +20,13 @@ def parse_args():
         default=0.3,
         help="Radius (in meters) of the virtual robot used for reachability constraints.",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="one_shot",
+        choices=["one_shot", "finetuned", "default", "no_constraint", "no_image"],
+        help="Layout mode: 'one_shot' = place all assets in one group; others = LLM groups assets then place per group.",
+    )
     return parser.parse_args()
 
 def prepare_task_assets(task, asset_dir):
@@ -115,7 +122,7 @@ def main():
     
     # Initialize constraint solver
     layout_solver = LayoutVLM(
-        mode="one_shot",
+        mode=args.mode,
         save_dir=args.save_dir,
         asset_source="objaverse"  # Default to objaverse
     )

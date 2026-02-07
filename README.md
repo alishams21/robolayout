@@ -29,7 +29,7 @@ cd third_party/Rotated_IoU/cuda_op
 python setup.py install
 ```
 
-4. To run the code:
+4. To run the code you need to run following command. There are two modes for running code: one-shot and finetuned. In one_shot: Place every asset in a single step using one layout prompt (no grouping). At finetuned: First use the LLM to group assets (e.g. bed + nightstands, then rug), then run layout and constraints group by group with group-specific prompts.:
 
 ```
 python main.py \                                                                        
@@ -38,6 +38,7 @@ python main.py \
   --save_dir ./results/... \
   --model gpt-4o \
   --asset_dir ./objaverse_processed
+  --mode finetuned
 ```
 
 5. The final GIF showing progress of layout optimization (2D top-down view of furniture placement) is saved as `final.gif` in your results folder (e.g. `results/test_run/final.gif`). Example:
