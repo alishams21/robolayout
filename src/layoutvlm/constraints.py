@@ -364,12 +364,79 @@ def against_wall(assets: list, device=None):
         [
             wall.corner1[0], wall.corner1[1],
             wall.corner2[0], wall.corner2[1]
-        ] 
+        ]
     ], dtype=corners.dtype, requires_grad=False).to(device)
     distances = point_to_segment_batch_loss(corners[:4, ...], segment)
     angle_difference = cosine_distance_loss(vector, wall.get_2dvector())
     return torch.clamp(torch.sum(distances[:2, 0]), max=10) + 10 * angle_difference
-    
+
+
+def symmetric_pair(assets: list, orientation_weight=0.5, device=None):
+    """
+    Place two assets symmetrically about a reference (wall or central object).
+    assets = [asset_a, asset_b, reference]. Reference can be a Wall or an AssetInstance
+    (e.g. bed). Symmetry axis: through reference; for a wall, perpendicular to the wall;
+    for an asset, perpendicular to its front (so left/right mirror).
+    """
+    if device is None:
+        device = get_device_with_index()
+    if device.startswith('cuda') and not torch.cuda.is_available():
+        device = 'cpu'
+    assert len(assets) == 3
+    asset_a, asset_b, reference = assets
+    # Axis: origin (2D) and unit direction (2D)
+    if hasattr(reference, 'corner1') and hasattr(reference, 'corner2'):
+        # Wall: axis = perpendicular to wall through midpoint
+        c1 = reference.corner1
+        c2 = reference.corner2
+        origin = torch.tensor(
+            [(c1[0] + c2[0]) / 2.0, (c1[1] + c2[1]) / 2.0],
+            dtype=torch.float32, device=device
+        )
+        wall_vec = torch.tensor(
+            [c2[0] - c1[0], c2[1] - c1[1]],
+            dtype=torch.float32, device=device
+        )
+        # Perpendicular (rotate 90): (-dy, dx)
+        axis_dir = torch.tensor(
+            [-wall_vec[1].item(), wall_vec[0].item()],
+            dtype=torch.float32, device=device
+        )
+        axis_dir = F.normalize(axis_dir.unsqueeze(0), p=2, dim=-1).squeeze(0)
+    else:
+        # Asset: axis through position, perpendicular to front (left/right symmetry)
+        origin = reference.position[:2].to(device).detach()
+        front = reference.get_2dvector().to(device).detach()
+        # Perpendicular: (-front_y, front_x)
+        axis_dir = torch.stack([-front[1], front[0]], dim=0)
+        axis_dir = F.normalize(axis_dir.unsqueeze(0), p=2, dim=-1).squeeze(0)
+
+    def reflect_2d(p, c, u):
+        # p, c, u: (2,) tensors; u unit. Reflect p across line through c with direction u.
+        p = p.to(device)
+        diff = p - c
+        dot = torch.dot(diff, u)
+        return c + 2 * dot * u - diff
+
+    pos_a = asset_a.position[:2].to(device)
+    pos_b = asset_b.position[:2].to(device)
+    ref_a = reflect_2d(pos_a, origin, axis_dir)
+    ref_b = reflect_2d(pos_b, origin, axis_dir)
+    # Symmetric: reflect(a) ~ b and reflect(b) ~ a; gradient through both assets
+    pos_loss = torch.sum((pos_b - ref_a) ** 2) + torch.sum((pos_a - ref_b) ** 2)
+
+    # Mirror orientations: reflected forward vectors should align
+    vec_a = asset_a.get_2dvector().to(device)
+    vec_b = asset_b.get_2dvector().to(device)
+    ref_vec_a = 2 * torch.dot(vec_a, axis_dir) * axis_dir - vec_a
+    ref_vec_a = F.normalize(ref_vec_a.unsqueeze(0), p=2, dim=-1).squeeze(0)
+    ref_vec_b = 2 * torch.dot(vec_b, axis_dir) * axis_dir - vec_b
+    ref_vec_b = F.normalize(ref_vec_b.unsqueeze(0), p=2, dim=-1).squeeze(0)
+    orient_loss = cosine_distance_loss(ref_vec_a, vec_b) + cosine_distance_loss(ref_vec_b, vec_a)
+
+    return pos_loss + orientation_weight * orient_loss
+
+
 ################################
 ### deprecated
 ################################
@@ -455,5 +522,10 @@ ALL_CONSTRAINTS = {
         constraint_name="align_with",
         constraint_func=align_with,
         description="the first object should be aligned with the second object both in orientation and distance",
+    ),
+    "symmetric_pair": Constraint(
+        constraint_name="symmetric_pair",
+        constraint_func=symmetric_pair,
+        description="place two objects symmetrically about a reference (wall or central object); use for e.g. nightstands on either side of a bed",
     ),
 }

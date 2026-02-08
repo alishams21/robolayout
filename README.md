@@ -116,7 +116,7 @@ The script will generate a layout.json file in the specified save directory cont
 
 ```bibtex
 @inproceedings{RoboLayout,
-  title={RoboLayout: A Semantics-Driven 3D Layout Optimizer with Robotic Reachability Constraints},
+  title={RoboLayout: Differentiable 3D Scene Generation for Embodied Agents},
   author={Ali Shamsaddinlou}
 }
 ```

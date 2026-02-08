@@ -57,6 +57,7 @@ from .constraints import align_with, on_top_of
 from .constraints import distance_constraint
 from .constraints import point_towards
 from .constraints import against_wall
+from .constraints import symmetric_pair
 from utils.placement_utils import get_random_placement
 from .scene import AssetInstance, Wall
 from .device_utils import get_device_with_index, to_device
@@ -334,7 +335,25 @@ class SandBoxEnv:
 
                 filtered_new_constraints.append((constraint, instance_ids))
                 new_constraint_str += f"solver.{constraint.constraint_name}({instance_ids[0]}, {instance_ids[1]}, {constraint.params['angle']})\n"
-            
+
+            elif constraint.constraint_name == "symmetric_pair":
+                # instance_ids = [id_a, id_b, id_reference]; reject if fixed_point or duplicate pair
+                if len(instance_ids) != 3:
+                    new_constraint_str += f"==> (rejected) solver.symmetric_pair(...) requires exactly 3 arguments (asset_a, asset_b, reference)\n"
+                    continue
+                if any(uid.startswith("fixed_point") for uid in instance_ids):
+                    continue
+                pair = frozenset([instance_ids[0], instance_ids[1]])
+                already_has = any(
+                    c[0].constraint_name == "symmetric_pair" and frozenset(c[1][:2]) == pair
+                    for c in self.all_constraints + filtered_new_constraints
+                )
+                if already_has:
+                    new_constraint_str += f"==> (rejected) solver.symmetric_pair({instance_ids[0]}, {instance_ids[1]}, {instance_ids[2]}) — pair already has symmetry\n"
+                    continue
+                filtered_new_constraints.append((constraint, instance_ids))
+                new_constraint_str += f"solver.symmetric_pair({instance_ids[0]}, {instance_ids[1]}, {instance_ids[2]})\n"
+
             elif constraint.constraint_name == "on_top_of":
                 pass
 
@@ -403,6 +422,18 @@ class SandBoxEnv:
                             constraint_name=function_name,
                             constraint_func=point_towards,
                             angle=constraint[0].params["angle"]
+                        ),
+                        constraint[1]
+                    )
+                )
+            elif function_name == "symmetric_pair":
+                # constraint[1] = [id_a, id_b, id_reference] (reference = wall or central asset)
+                constraints_for_solver.append(
+                    (
+                        Constraint(
+                            constraint_name=function_name,
+                            constraint_func=symmetric_pair,
+                            orientation_weight=constraint[0].params.get("orientation_weight", 0.5),
                         ),
                         constraint[1]
                     )

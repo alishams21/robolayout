@@ -131,6 +131,15 @@ class ConstraintSolver:
             [asset1.instance_id, asset2.instance_id]
         ])
 
+    def symmetric_pair(self, asset_a: AssetInstance, asset_b: AssetInstance, reference):
+        asset_a.instance_id = get_instance_id(asset_a)
+        asset_b.instance_id = get_instance_id(asset_b)
+        ref_instance_id = get_instance_id(reference)
+        self.constraints.append([
+            Constraint("symmetric_pair"),
+            [asset_a.instance_id, asset_b.instance_id, ref_instance_id]
+        ])
+
     def align_x(self, asset1: AssetInstance, asset2: AssetInstance):
         \"\"\"
         Add a constraint that asset1 should have the same x-coordinate as asset2.
@@ -248,6 +257,19 @@ class ConstraintSolver:
         \"\"\"
         pass
 
+    def symmetric_pair(self, asset_a: AssetInstance, asset_b: AssetInstance, reference):
+        \"\"\"
+        Place asset_a and asset_b symmetrically about a reference. Use for pairs that should mirror each other (e.g. nightstands on either side of a bed, or two chairs flanking a table).
+
+        Args:
+            asset_a: First asset of the pair. Both asset_a and asset_b will be optimized to be mirror-symmetric.
+            asset_b: Second asset of the pair.
+            reference: The symmetry axis is defined by this reference. Can be a Wall (axis perpendicular to the wall) or an AssetInstance (e.g. bed[0]; axis through the reference, perpendicular to its front, so the pair is left/right of it).
+
+        Example: solver.symmetric_pair(night_stand[0], night_stand[1], bed[0])
+        \"\"\"
+        pass
+
 solver = ConstraintSolver()
 """
 
@@ -257,10 +279,11 @@ Here are the base class definitions:
 ```python
 {base_class_definitions}
 ```
-The list of constraints available are: 
+The list of constraints available are:
 * z-axis constraints: on_top_of.
 * position-based constraints: against_wall, distance_constraint.
 * orientation-based constraints: align_with, point_towards.
+* symmetry: symmetric_pair(asset_a, asset_b, reference) — place two assets symmetrically about a reference (a Wall or an AssetInstance such as bed[0]). Use for e.g. nightstands on either side of a bed, or two lamps flanking a sofa. Example: solver.symmetric_pair(night_stand[0], night_stand[1], bed[0]).
 Specify at least one position-based constraint and one orientation-based constraint for each asset to be placed.
 Objects by default are placed on the floor. For small objects, please remember to specify on_top_of constraints to ensure they are placed on top of a surface.
 
