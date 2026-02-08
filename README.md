@@ -11,7 +11,25 @@ RoboLayout comprises three main layers. Orchestration: The central orchestrator 
   <img src="figures/architecture.png" alt="architecture diagram" >
 </p>
 
+### Implementation pipeline
 
+1. **Initial state** — The pipeline takes the **language instruction** (`task_description`, `layout_criteria`) and the **room shape** (`boundary.floor_vertices`, `wall_height`) plus the list of assets as the initial program state. The sandbox is initialized with walls and asset variables; positions and rotations are set to random feasible placements inside the boundary.
+
+2. **Furniture grouping** (non–one_shot modes) — An LLM groups furniture based on the prompt and task (e.g. “bed + nightstands”, “rug”, “seating”). Each group has a name and key spatial relations between assets. Grouping is written to `grouping.json`; placement then runs **group by group** with group-specific layout criteria.
+
+3. **Pose estimation and spatial relations** — For each (group of) assets, the system produces **pose and spatial relations** by calling an LLM with the current scene (top-down and side renderings) and the layout criteria. The LLM returns a **constraint program**: high-level relations such as `against_wall`, `align_with`, `point_towards`, `distance_constraint`, `on_top_of`.
+
+4. **Conversion to Python program** — The LLM output is parsed into executable Python: constraint calls (e.g. `solver.against_wall(...)`, `solver.distance_constraint(...)`) are executed in the sandbox. That updates the in-memory constraint list; the sandbox also exports the full program to `complete_sandbox_program.py` for inspection.
+
+5. **Optimization with reachability** — The gradient-based solver (e.g. `GradSolver.optimize`) minimizes a loss over positions and rotations: **overlap loss** (no intersection), **existing- and new-constraint losses** (satisfy spatial relations), and **reachability loss**. Reachability encourages clearance between furniture so a virtual disc of radius `robot_radius` can pass; it is disabled if `robot_radius` is None or ≤ 0. Optimization runs per group (or once in one_shot), producing poses and optional per-step GIFs.
+
+6. **Refinement** — After the main optimization, a **cleanup** step (e.g. `run_cleanup_step`) identifies problematic pairs (e.g. overlapping footprints), freezes non-problematic assets, and re-runs optimization only for the problematic subset. This refines the answer without full-scene re-optimization.
+
+### Self-consistent decoding vs self-consistency filter
+
+- **Self-consistent decoding** usually means: sample **multiple** outputs from the model (e.g. several constraint programs), then **select** one by a criterion (e.g. majority vote or best score). This codebase does **not** use self-consistent decoding: it obtains a single LLM constraint program per group (with retries on parse/execution failure), not multiple samples followed by selection.
+
+- **Self-consistency filter** is what **is** implemented: before optimization, the sandbox runs **`self_consistency_filtering`** on the new constraints. It checks consistency with the current scene and existing constraints: rejects duplicate or conflicting constraints (e.g. duplicate `against_wall`, or a second orientation constraint on the same object), resolves `against_wall` to the nearest wall, and tightens distance constraints to feasible ranges. Rejected or updated constraints are logged (e.g. in `new_constraints.txt` with “(rejected)” / “(updated)”). Only the filtered constraint list is passed to the optimizer. So the pipeline uses a **constraint-level self-consistency filter**, not multi-sample self-consistent decoding.
 
 ## Installation
 
