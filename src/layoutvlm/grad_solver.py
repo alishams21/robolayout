@@ -172,6 +172,8 @@ class GradSolver:
 
             We approximate clearance using center distances in the XY plane and
             each asset's min(X, Y) footprint.
+            Not applied to pairs that have an explicit distance_constraint (to avoid
+            conflict with semantic "close" constraints from the LLM).
             """
             if not self.robot_radius or self.robot_radius <= 0:
                 return torch.tensor(0.0, dtype=torch.float32, device=self.device)
@@ -183,6 +185,12 @@ class GradSolver:
             if len(movable_assets) < 2:
                 return torch.tensor(0.0, dtype=torch.float32, device=self.device)
 
+            # Pairs with explicit distance_constraint: skip reachability to avoid conflict
+            distance_constraint_pairs = set()
+            for constraint, instance_ids in existing_constraints + new_constraints:
+                if constraint.constraint_name == "distance_constraint" and len(instance_ids) >= 2:
+                    distance_constraint_pairs.add(frozenset([instance_ids[0], instance_ids[1]]))
+
             reach_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
             required_clearance = 2.0 * float(self.robot_radius)
 
@@ -193,6 +201,10 @@ class GradSolver:
 
                     # Skip stacked pairs treated separately
                     if (asset_i.id, asset_j.id) in self.on_top_of_assets or (asset_j.id, asset_i.id) in self.on_top_of_assets:
+                        continue
+
+                    # Skip pairs with explicit distance_constraint (LLM-specified distance)
+                    if frozenset([asset_i.id, asset_j.id]) in distance_constraint_pairs:
                         continue
 
                     pos_i = asset_i.position[:2].to(self.device)
