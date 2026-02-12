@@ -33,7 +33,7 @@ RoboLayout comprises three main layers. Orchestration: The central orchestrator 
 
 ## Constraints
 
-The system uses both hard constraints (must be satisfied) and soft constraints (optimized via loss functions):
+List of hard constraints and soft constraints:
 
 | Type | Name | Rule |
 |------|------|------|
