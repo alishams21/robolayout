@@ -31,6 +31,24 @@ RoboLayout comprises three main layers. Orchestration: The central orchestrator 
 
 - **Self-consistency filter** is what **is** implemented: before optimization, the sandbox runs **`self_consistency_filtering`** on the new constraints. It checks consistency with the current scene and existing constraints: rejects duplicate or conflicting constraints (e.g. duplicate `against_wall`, or a second orientation constraint on the same object), resolves `against_wall` to the nearest wall, and tightens distance constraints to feasible ranges. Rejected or updated constraints are logged (e.g. in `new_constraints.txt` with “(rejected)” / “(updated)”). Only the filtered constraint list is passed to the optimizer. So the pipeline uses a **constraint-level self-consistency filter**, not multi-sample self-consistent decoding.
 
+## Constraints
+
+The system uses both hard constraints (must be satisfied) and soft constraints (optimized via loss functions):
+
+| Type | Name | Rule |
+|------|------|------|
+| Hard | Boundary (inside room) | Asset footprints must be inside room polygon; corners outside are projected onto boundary. |
+| Hard | On-top (vertical + horizontal) | For on_top_of(A,B): A's z-position is set above B; A's xy-position is projected onto B's 2D polygon. |
+| Hard | Rotation unit norm | Rotation parameterized as (cos θ, sin θ) with unit norm constraint. |
+| Soft | Overlap (no intersection) | Non-on-top pairs must not overlap; loss penalizes IoU/bbox overlap. |
+| Soft | Reachability | Objects should leave clearance for robot disc; loss penalizes insufficient center distance. |
+| Soft | Against_wall | Asset should be close to wall with front parallel; loss combines distance and angle. |
+| Soft | Distance_constraint | Center distance must be in [min_distance, max_distance]; loss penalizes out-of-range. |
+| Soft | Point_towards | Asset1's front should point toward asset2; loss uses cosine alignment if ray misses. |
+| Soft | Align_with | Two assets' forward directions should be aligned; loss uses cosine distance between vectors. |
+| Soft | On_top_of (soft part) | Upper object should stay over lower in 2D; loss encourages horizontal overlap via negative IoU. |
+| Soft | Symmetric_pair | Two assets should be mirror-symmetric; loss penalizes position reflection error and orientation misalignment. |
+
 ## Installation
 
 1. Clone this repository
